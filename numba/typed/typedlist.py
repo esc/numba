@@ -114,6 +114,11 @@ def _index(l, item, start, end):
     return l.index(item, start, end)
 
 
+@njit
+def _sort(l):
+    l.sort()
+
+
 def _from_meminfo_ptr(ptr, listtype):
     return List(meminfo=ptr, lsttype=listtype)
 
@@ -237,6 +242,9 @@ class List(MutableSequence):
 
     def index(self, item, start=None, stop=None):
         return _index(self, item, start, stop)
+
+    def sort(self):
+        return _sort(self)
 
     def __str__(self):
         buf = []

@@ -7,8 +7,9 @@ from enum import IntEnum
 
 import numpy as np
 from llvmlite import ir
+import numpy as np
 
-from numba import cgutils
+from numba import cgutils, njit
 from numba import _helperlib
 
 from numba.extending import (
@@ -957,6 +958,40 @@ def impl_index(l, item, start=None, end=None):
                 return i
         else:
             raise ValueError("item not in list")
+
+    return impl
+
+
+@njit
+def quicksort_helper(l):
+
+    if len(l) <= 1:
+        return l
+    lower, upper, center = new_list(types.int64), new_list(types.int64), new_list(types.int64)
+    part = l[np.random.randint(0, len(l))]
+    for i in l:
+        if i < part:
+            lower.append(i)
+        elif i > part:
+            upper.append(i)
+        else:
+            center.append(i)
+    l = quicksort_helper(lower)
+    c = center
+    u = quicksort_helper(upper)
+    l.extend(c)
+    l.extend(u)
+    return l
+
+
+@overload_method(types.ListType, 'sort')
+def impl_sort(l):
+    if not isinstance(l, types.ListType):
+        return
+
+    def impl(l):
+        r = quicksort_helper(l)
+        l[:] = r
 
     return impl
 
