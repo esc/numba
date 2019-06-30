@@ -98,31 +98,75 @@ class StuartsTests(MemoryLeakMixin, TestCase):
 
     # --------------------------------------------------------------------------
     def test_init_1(self):
-        # whilst this is caught, it should be caught earlier and have a better
-        # message raised
-        # FIXME: need help from Siu
-        # NOTE: This is an type error.  types.NoneType is not instance of Type
-        l = List.empty_list(types.NoneType)
+        self.disable_leak_check()
+
+        @njit
+        def foo():
+            List.empty_list(types.NoneType)
+
+        with self.assertRaises(TypeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
+
+        # FIXME this doesn't fail as a TypeError because types.NoneType isn't
+        # available in a jit context
+        with self.assertRaises(TypeError) as raises:
+            foo()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
 
     def test_init_2(self):
-        # Fairly sure this shouldn't work!
-        # FIXME: need help from Siu
-        # NOTE: This is an type error.  `1j` is not instance of Type
-        l = List.empty_list(1j)
-        print(repr(l))
+        self.disable_leak_check()
+
+        @njit
+        def foo():
+            List.empty_list(1j)
+
+        with self.assertRaises(TypeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
+
+        # FIXME: this doesn't fail, 1j comes in as numba.types.scalars.Complex
+        # which is a subtype of Type
+        with self.assertRaises(TypeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
 
     def test_init_3(self):
-        # nesting seems to leak
-        # FIXME: intenion unclear, I think ty1, ty2 and ty3 should be type objects
-        ty1 = List.empty_list(types.int64)
-        # NOTE: This is an type error.  `ty1` is not instance of Type
-        ty2 = List.empty_list(ty1)
-        ty3 = List.empty_list(ty2)
-        ty4 = List.empty_list(ty3)
+        self.disable_leak_check()
+        @njit
+        def foo():
+            ty1 = List.empty_list(types.int64)
+            ty2 = List.empty_list(ty1)
+            ty3 = List.empty_list(ty2)
+            _ = List.empty_list(ty3)
+
+        with self.assertRaises(TypeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
+
+        with self.assertRaises(TypeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
 
     def test_init_4(self):
-        # fails during lowering
-        # FIXED in code, no change to test needed
         List.empty_list(types.Array(types.float64, 4, 'C'))
 
     @unittest.skip
