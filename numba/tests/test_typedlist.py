@@ -9,11 +9,20 @@ from numba import int32, types
 from numba.typed import List, Dict
 from numba.utils import IS_PY3
 from numba.errors import TypingError
+from numba.typing.typeof import typeof
 from .support import TestCase, MemoryLeakMixin, unittest
 
 from numba.unsafe.refcount import get_refcount
 
 skip_py2 = unittest.skipUnless(IS_PY3, reason='not supported in py2')
+
+
+def to_tl(l):
+    """ Convert cpython list to typed-list. """
+    tl = List.empty_list(int32)
+    for k in l:
+        tl.append(k)
+    return tl
 
 
 class TestTypedList(MemoryLeakMixin, TestCase):
@@ -596,11 +605,6 @@ class StuartsTests(MemoryLeakMixin, TestCase):
             self.assertEqual(rl_, list(tl_))
             return rl_, tl_
 
-        def to_tl(l):
-            tl = List.empty_list(int32)
-            for k in l:
-                tl.append(k)
-            return tl
 
         ### Simple slicing ###
 
@@ -715,6 +719,84 @@ class StuartsTests(MemoryLeakMixin, TestCase):
             str(raises.exception),
         )
 
+    def test_delitem_slice(self):
+        """ Test delitem using a slice.
+
+        This tests suffers from combinatorial explosion, so we parametrize it
+        and compare results agains the regular list in a quasi fuzzing approach.
+
+        """
+
+        def setup(start=10, stop=20):
+            # initialize regular list
+            rl_ = list(range(start, stop))
+            # intialize typed list
+            tl_ = List.empty_list(int32)
+            # populate typed list
+            for i in range(start, stop):
+                tl_.append(i)
+            # check they are the same
+            self.assertEqual(rl_, list(tl_))
+            return rl_, tl_
+
+        # define the ranges
+        start_range = list(range(-20, 30))
+        stop_range = list(range(-20, 30))
+        step_range = [-5, -4, -3, -2, -1, 1, 2, 3, 4, 5]
+
+        rl, tl = setup()
+        # check that they are the same initially
+        self.assertEqual(rl, list(tl))
+        # check that deletion of the whole list by slice works
+        del rl[:]
+        del tl[:]
+        self.assertEqual(rl, list(tl))
+
+        # start only
+        for sa in start_range:
+            rl, tl = setup()
+            del rl[sa:]
+            del tl[sa:]
+            self.assertEqual(rl, list(tl))
+        # stop only
+        for so in stop_range:
+            rl, tl = setup()
+            del rl[:so]
+            del tl[:so]
+            self.assertEqual(rl, list(tl))
+        # step only
+        for se in step_range:
+            rl, tl = setup()
+            del rl[::se]
+            del tl[::se]
+            self.assertEqual(rl, list(tl))
+
+        # start and stop
+        for sa, so in product(start_range, stop_range):
+            rl, tl = setup()
+            del rl[sa:so]
+            del tl[sa:so]
+            self.assertEqual(rl, list(tl))
+        # start and step
+        for sa, se in product(start_range, step_range):
+            rl, tl = setup()
+            del rl[sa::se]
+            del tl[sa::se]
+            self.assertEqual(rl, list(tl))
+        # stop and step
+        for so, se in product(stop_range, step_range):
+            rl, tl = setup()
+            del rl[:so:se]
+            del tl[:so:se]
+            self.assertEqual(rl, list(tl))
+
+        # start, stop and step
+        for sa, so, se in product(start_range, stop_range, step_range):
+            rl, tl = setup()
+            del rl[sa:so:se]
+            del tl[sa:so:se]
+            self.assertEqual(rl, list(tl))
+
 
 class TestExtend(MemoryLeakMixin, TestCase):
 
@@ -760,6 +842,125 @@ class TestExtend(MemoryLeakMixin, TestCase):
         expected = impl.py_func()
         got = impl()
         self.assertEqual(expected, got)
+
+
+@njit
+def cmp(a, b):
+    return a < b, a <= b, a == b, a != b, a >= b, a > b
+
+
+class TestComparisons(MemoryLeakMixin, TestCase):
+
+    def _cmp_dance(self, expected, pa, pb, na, nb):
+        # interpreter with regular list
+        self.assertEqual(cmp.py_func(pa, pb), expected)
+
+        # interpreter with typed-list
+        py_got = cmp.py_func(na, nb)
+        self.assertEqual(py_got, expected)
+
+        # compiled with typed-list
+        jit_got = cmp(na, nb)
+        self.assertEqual(jit_got, expected)
+
+    def test_empty_vs_empty(self):
+        pa, pb = [], []
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, True, True, False, True, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_empty_vs_singleton(self):
+        pa, pb = [], [0]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = True, True, False, True, False, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_singleton_vs_empty(self):
+        pa, pb = [0], []
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, False, False, True, True, True
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_singleton_vs_singleton_equal(self):
+        pa, pb = [0], [0]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, True, True, False, True, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_singleton_vs_singleton_less_than(self):
+        pa, pb = [0], [1]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = True, True, False, True, False, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_singleton_vs_singleton_greater_than(self):
+        pa, pb = [1], [0]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, False, False, True, True, True
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_equal(self):
+        pa, pb = [1, 2, 3], [1, 2, 3]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, True, True, False, True, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_first_shorter(self):
+        pa, pb = [1, 2], [1, 2, 3]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = True, True, False, True, False, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_second_shorter(self):
+        pa, pb = [1, 2, 3], [1, 2]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, False, False, True, True, True
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_first_less_than(self):
+        pa, pb = [1, 2, 2], [1, 2, 3]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = True, True, False, True, False, False
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_first_greater_than(self):
+        pa, pb = [1, 2, 3], [1, 2, 2]
+        na, nb = to_tl(pa), to_tl(pb)
+        expected = False, False, False, True, True, True
+        self._cmp_dance(expected, pa, pb, na, nb)
+
+    def test_typing_mimatch(self):
+        self.disable_leak_check()
+        l = to_tl([1, 2, 3])
+
+        with self.assertRaises(TypingError) as raises:
+            cmp.py_func(l, 1)
+        self.assertIn(
+            "list can only be compared to list",
+            str(raises.exception),
+        )
+        with self.assertRaises(TypingError) as raises:
+            cmp(l, 1)
+        self.assertIn(
+            "list can only be compared to list",
+            str(raises.exception),
+        )
+
+
+class TestListInferred(TestCase):
+
+    def test_simple_refine(self):
+        @njit
+        def foo():
+            l = List()
+            l.append(1)
+            return l
+
+        expected = foo.py_func()
+        got = foo()
+        self.assertEqual(expected, got)
+        self.assertEqual(list(got), [1])
+        self.assertEqual(typeof(got).item_type, typeof(1))
 
 
 class TestListRefctTypes(MemoryLeakMixin, TestCase):
@@ -865,7 +1066,6 @@ class TestListRefctTypes(MemoryLeakMixin, TestCase):
 
         expected = foo.py_func()
         got = foo()
-        got == expected
         self.assertEqual(expected, got)
 
     @skip_py2
@@ -880,5 +1080,5 @@ class TestListRefctTypes(MemoryLeakMixin, TestCase):
 
         expected = foo.py_func()
         got = foo()
-        got == expected
-        self.assertEqual(expected, got)
+        # Need to compare the nested arrays
+        self.assertTrue(np.all(expected[0] == got[0]))

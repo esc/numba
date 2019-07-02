@@ -5,7 +5,6 @@ import ctypes
 import operator
 from enum import IntEnum
 
-import numpy as np
 from llvmlite import ir
 
 from numba import cgutils
@@ -35,7 +34,6 @@ from numba.typedobjectutils import (_as_bytes,
                                     _cast,
                                     _nonoptional,
                                     _get_incref_decref,
-                                    _get_equal,
                                     _container_get_data,
                                     _container_get_meminfo,
                                     )
@@ -159,7 +157,6 @@ def _list_set_method_table(typingctx, lp, itemty):
 
     def codegen(context, builder, sig, args):
         vtablety = ir.LiteralStructType([
-            ll_voidptr_type,  # equal
             ll_voidptr_type,  # item incref
             ll_voidptr_type,  # item decref
         ])
@@ -175,20 +172,14 @@ def _list_set_method_table(typingctx, lp, itemty):
         dp = args[0]
         vtable = cgutils.alloca_once(builder, vtablety, zfill=True)
 
-        # install key incref/decref
-        item_equal_ptr = cgutils.gep_inbounds(builder, vtable, 0, 0)
-        item_incref_ptr = cgutils.gep_inbounds(builder, vtable, 0, 1)
-        item_decref_ptr = cgutils.gep_inbounds(builder, vtable, 0, 2)
+        # install item incref/decref
+        item_incref_ptr = cgutils.gep_inbounds(builder, vtable, 0, 0)
+        item_decref_ptr = cgutils.gep_inbounds(builder, vtable, 0, 1)
 
         dm_item = context.data_model_manager[itemty.instance_type]
         if dm_item.contains_nrt_meminfo():
-            equal = _get_equal(context, builder.module, dm_item, 'list')
             item_incref, item_decref = _get_incref_decref(
                 context, builder.module, dm_item, "list"
-            )
-            builder.store(
-                builder.bitcast(equal, item_equal_ptr.type.pointee),
-                item_equal_ptr,
             )
             builder.store(
                 builder.bitcast(item_incref, item_incref_ptr.type.pointee),
@@ -688,16 +679,8 @@ def impl_setitem(l, index, item):
                                           slice_range.start + len(item))
                     for i,j in zip(replace_range, item):
                         l[i] = j
-                    # pop the remaining ones
-                    pop_range = range(slice_range.start + len(item),
-                                      slice_range.stop)
-                    # pop will mutate the list, so we always need to pop the
-                    # same index
-                    k = slice_range.start + len(item)
-                    for _ in pop_range:
-                        # FIXME: This may be slow.  Each pop can incur a
-                        # memory copy of one or more items.
-                        l.pop(k)
+                    # delete remaining ones
+                    del l[slice_range.start + len(item):slice_range.stop]
             # Extended slices
             else:
                 if len(slice_range) != len(item):
@@ -739,6 +722,38 @@ def impl_pop(l, index=-1):
         raise TypingError("argument for pop must be a signed integer")
 
 
+@intrinsic
+def _list_delete_slice(typingctx, l, start, stop, step):
+    """Wrap numba_list_delete_slice
+    """
+    resty = types.int32
+    sig = resty(l, start, stop, step)
+
+    def codegen(context, builder, sig, args):
+        fnty = ir.FunctionType(
+            ll_status,
+            [ll_list_type, ll_ssize_t, ll_ssize_t, ll_ssize_t],
+        )
+        [l, start, stop, step] = args
+        [tl, tstart, tstop, tstep] = sig.args
+        fn = builder.module.get_or_insert_function(fnty,
+                                                   name='numba_list_delete_slice')
+
+        lp = _container_get_data(context, builder, tl, l)
+        status = builder.call(
+            fn,
+            [
+                lp,
+                start,
+                stop,
+                step,
+            ],
+        )
+        return status
+
+    return sig, codegen
+
+
 @overload(operator.delitem)
 def impl_delitem(l, index):
     if not isinstance(l, types.ListType):
@@ -752,8 +767,11 @@ def impl_delitem(l, index):
 
     elif isinstance(index, types.SliceType):
         def slice_impl(l, index):
-            raise NotImplementedError
-
+            slice_range = handle_slice(l, index)
+            _list_delete_slice(l,
+                               slice_range.start,
+                               slice_range.stop,
+                               slice_range.step)
         return slice_impl
 
     else:
@@ -934,6 +952,65 @@ def impl_index(l, item, start=None, end=None):
     return impl
 
 
+@register_jitable
+def compare(this, other):
+    """Oldschool (python 2.x) cmp.
+
+       if this < other return -1
+       if this = other return 0
+       if this > other return 1
+    """
+    if len(this) != len(other):
+        return -1 if len(this) < len(other) else 1
+    for i in range(len(this)):
+        this_item, other_item = this[i], other[i]
+        if this_item != other_item:
+            return -1 if this_item < other_item else 1
+    else:
+        return 0
+
+
+def compare_helper(this, other, accepted):
+    if not isinstance(this, types.ListType):
+        return
+    if not isinstance(other, types.ListType):
+        raise TypingError("list can only be compared to list")
+
+    def impl(this, other):
+        return compare(this, other) in accepted
+    return impl
+
+
+@overload(operator.eq)
+def impl_equal(this, other):
+    return compare_helper(this, other, (0,))
+
+
+@overload(operator.ne)
+def impl_not_equal(this, other):
+    return compare_helper(this, other, (-1, 1))
+
+
+@overload(operator.lt)
+def impl_less_than(this, other):
+    return compare_helper(this, other, (-1, ))
+
+
+@overload(operator.le)
+def impl_less_than_or_equal(this, other):
+    return compare_helper(this, other, (-1, 0))
+
+
+@overload(operator.gt)
+def impl_greater_than(this, other):
+    return compare_helper(this, other, (1,))
+
+
+@overload(operator.ge)
+def impl_greater_than_or_equal(this, other):
+    return compare_helper(this, other, (0, 1))
+
+
 @lower_builtin('getiter', types.ListType)
 def impl_list_getiter(context, builder, sig, args):
     """Implement iter(List).
@@ -968,59 +1045,6 @@ def impl_list_getiter(context, builder, sig, args):
     )
 
 
-@overload(operator.eq)
-def impl_equal(this, other):
-    if not isinstance(this, types.ListType):
-        return
-    if not isinstance(other, types.ListType):
-        # If RHS is not a list, always returns False
-        def impl_type_mismatch(this, other):
-            return False
-        return impl_type_mismatch
-
-    otheritemty = other.item_type
-
-    # special case: either list has array types as items
-    if (isinstance(this.item_type, types.Array) or
-            isinstance(other.item_type, types.Array)):
-        def impl_type_matched_array_item_type(this, other):
-            if len(this) != len(other):
-                return False
-            for i in range(len(this)):
-                this_item, other_item = this[i], other[i]
-                # Cast item from LHS to the key-type of RHS
-                this_item = _cast(this_item, otheritemty)
-                # Reduce array of booleans into single value
-                if np.any(this_item != other_item):
-                    return False
-            return True
-        return impl_type_matched_array_item_type
-    # non array type items
-    else:
-        def impl_type_matched_generic_item_type(this, other):
-            if len(this) != len(other):
-                return False
-            for i in range(len(this)):
-                this_item, other_item = this[i], other[i]
-                # Cast item from LHS to the key-type of RHS
-                this_item = _cast(this_item, otheritemty)
-                if this_item != other_item:
-                    return False
-            return True
-        return impl_type_matched_generic_item_type
-
-
-@overload(operator.ne)
-def impl_not_equal(this, other):
-    if not isinstance(this, types.ListType):
-        return
-
-    def impl(this, other):
-        return not (this == other)
-
-    return impl
-
-
 @lower_builtin('iternext', types.ListTypeIteratorType)
 @iternext_impl(RefType.BORROWED)
 def impl_iterator_iternext(context, builder, sig, args, result):
@@ -1038,12 +1062,21 @@ def impl_iterator_iternext(context, builder, sig, args, result):
     item_raw_ptr = cgutils.alloca_once(builder, ll_bytes)
 
     status = builder.call(iternext, (it.state, item_raw_ptr))
-    # TODO: no handling of error state i.e. mutated list
-    #       all errors are treated as exhausted iterator
-    is_valid = builder.icmp_signed('==', status, status.type(int(ListStatus.LIST_OK)))
+
+    # check for list mutation
+    mutated_status = status.type(int(ListStatus.LIST_ERR_MUTATED))
+    is_mutated = builder.icmp_signed('==', status, mutated_status)
+    with builder.if_then(is_mutated, likely=False):
+        context.call_conv.return_user_exc(
+            builder, RuntimeError, ("list was mutated during iteration",))
+
+    # if the list wasn't mutated it is either fine or the iterator was
+    # exhausted
+    ok_status = status.type(int(ListStatus.LIST_OK))
+    is_valid = builder.icmp_signed('==', status, ok_status)
     result.set_valid(is_valid)
 
-    with builder.if_then(is_valid):
+    with builder.if_then(is_valid, likely=True):
         item_ty = iter_type.parent.item_type
 
         dm_item = context.data_model_manager[item_ty]

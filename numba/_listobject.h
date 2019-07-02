@@ -3,11 +3,9 @@
 #ifndef NUMBA_LIST_H
 #define NUMBA_LIST_H
 
-typedef int (*list_item_comparator_t)(const char *lhs, const char *rhs);
 typedef void (*list_refcount_op_t)(const void*);
 
 typedef struct {
-    list_item_comparator_t    item_equal;
     list_refcount_op_t       item_incref;
     list_refcount_op_t       item_decref;
 } list_type_based_methods_table;
@@ -84,6 +82,10 @@ numba_list_pop(NB_List *lp, Py_ssize_t index, char *out);
 // FIXME: should this be public?
 NUMBA_EXPORT_FUNC(int)
 numba_list_resize(NB_List *lp, Py_ssize_t newsize);
+
+NUMBA_EXPORT_FUNC(int)
+numba_list_delete_slice(NB_List *lp,
+                        Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step);
 
 NUMBA_EXPORT_FUNC(size_t)
 numba_list_iter_sizeof(void);

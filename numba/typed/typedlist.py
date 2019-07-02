@@ -65,6 +65,11 @@ def _pop(l, i):
 
 
 @njit
+def _delitem(l, i):
+    del l[i]
+
+
+@njit
 def _extend(l, iterable):
     return l.extend(iterable)
 
@@ -102,6 +107,26 @@ def _eq(t, o):
 @njit
 def _ne(t, o):
     return t != o
+
+
+@njit
+def _lt(t, o):
+    return t < o
+
+
+@njit
+def _le(t, o):
+    return t <= o
+
+
+@njit
+def _gt(t, o):
+    return t > o
+
+
+@njit
+def _ge(t, o):
+    return t >= o
 
 
 @njit
@@ -180,6 +205,18 @@ class List(MutableSequence):
     def __ne__(self, other):
         return _ne(self, other)
 
+    def __lt__(self, other):
+        return _lt(self, other)
+
+    def __le__(self, other):
+        return _le(self, other)
+
+    def __gt__(self, other):
+        return _gt(self, other)
+
+    def __ge__(self, other):
+        return _ge(self, other)
+
     def append(self, item):
         if not self._typed:
             self._initialise_list(item)
@@ -204,7 +241,7 @@ class List(MutableSequence):
         return _contains(self, item)
 
     def __delitem__(self, i):
-        _pop(self, i)
+        _delitem(self, i)
 
     def insert(self, i, item):
         _insert(self, i, item)
