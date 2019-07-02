@@ -137,7 +137,7 @@ class StuartsTests(MemoryLeakMixin, TestCase):
             List.empty_list(1j)
 
         with self.assertRaises(TypeError) as raises:
-            foo.py_func()
+            foo()
         self.assertIn(
             "*itemty* must be of a Type instance",
             str(raises.exception),
@@ -178,21 +178,20 @@ class StuartsTests(MemoryLeakMixin, TestCase):
     def test_init_4(self):
         List.empty_list(types.Array(types.float64, 4, 'C'))
 
-    @unittest.skip
     def test_init_5(self):
-        # fails during lowering, expect similar issue to #4.
-        # FIXME: bug in dictobject equals method, doesn't handle numpy arrays
-        List.empty_list(Dict.empty(int32, types.Array(types.float64, 4, 'C')))
+        with self.assertRaises(TypeError) as raises:
+            List.empty_list(Dict.empty(int32, types.Array(types.float64, 4, 'C')))
+        self.assertIn(
+            "*itemty* must be of a Type instance",
+            str(raises.exception),
+        )
 
     # --------------------------------------------------------------------------
-    # @unittest.skip
+
     def test_append_1(self):
-        # self reference mutation
-        # Fail: wrong answer
-        # FIXME: cpython runs away with this one, unclear what Numba should do
-        # NOTE: it's okay to be restrictive and raise on mutation until someone complain
+        self.disable_leak_check()
         @njit
-        def impl():
+        def foo():
             l = List.empty_list(int32)
             for i in range(10):
                 l.append(i)
@@ -201,50 +200,35 @@ class StuartsTests(MemoryLeakMixin, TestCase):
                 l.append(x)
             return l
 
-        expected = impl.py_func()
-        got = impl()
-        self.assertEqual(expected, got)
+        with self.assertRaises(RuntimeError) as raises:
+            foo.py_func()
+        self.assertIn(
+            "list was mutated during iteration",
+            str(raises.exception),
+        )
+        with self.assertRaises(RuntimeError) as raises:
+            foo()
+        self.assertIn(
+            "list was mutated during iteration",
+            str(raises.exception),
+        )
 
-    # @unittest.skip
     def test_append_2(self):
-        # check mutation of pointer ref is transparent
-        # Fail: AttributeError: 'ListType' object has no attribute 'instance_type'
-        # FIXME: intention of test unclear, types should probably be defined
-        # outside jitted scope
+        nested = types.ListType(types.unicode_type)
+
         @njit
-        def impl():
-            ty = List.empty_list(types.unicode_type)
-            l = List.empty_list(ty)
+        def foo():
+            l = List.empty_list(nested)
 
             z = List.empty_list(types.unicode_type)
             for i in range(10):
                 z.append('a' * 2)
 
-            for i in z:
-                l.append(z)
+            l.append(z)
             return l
 
-        expected = impl.py_func()
-        got = impl()
-        self.assertEqual(expected, got)
-
-    @unittest.skip
-    def test_append_3(self):
-        # self reference mutation
-        # Fail: wrong answer
-        # FIXME: same as test_append_1
-        @njit
-        def impl():
-            l = List.empty_list(int32)
-            for i in range(10):
-                l.append(i)
-
-            for x in l:
-                l.append(x)
-            return l
-
-        expected = impl.py_func()
-        got = impl()
+        expected = foo.py_func()
+        got = foo()
         self.assertEqual(expected, got)
 
     # --------------------------------------------------------------------------
