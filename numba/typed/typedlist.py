@@ -234,7 +234,10 @@ class List(MutableSequence):
             return _getitem(self, i)
 
     def __iter__(self):
+        current_length = len(self)
         for i in range(len(self)):
+            if current_length != len(self):
+                raise RuntimeError("list was mutated during iteration")
             yield self[i]
 
     def __contains__(self, item):
