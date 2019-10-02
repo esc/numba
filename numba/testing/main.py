@@ -282,11 +282,11 @@ class NumbaTestProgram(unittest.main):
                 msg = ("Value specified for the number of processes to use in "
                     "running the suite must be > 0")
                 raise ValueError(msg)
-            self.testRunner = ParallelTestRunner(self.testRunner,
-                                                 self.multiprocess,
-                                                 verbosity=self.verbosity,
-                                                 failfast=self.failfast,
-                                                 buffer=self.buffer)
+            self.testRunner = NumbaTestRunner(self.testRunner,
+                                              self.multiprocess,
+                                              verbosity=self.verbosity,
+                                              failfast=self.failfast,
+                                              buffer=self.buffer)
 
         def run_tests_real():
             super(NumbaTestProgram, self).runTests()
@@ -669,7 +669,8 @@ def _split_nonparallel_tests(test):
 # A test can't run longer than 10 minutes
 _TIMEOUT = 600
 
-class ParallelTestRunner(runner.TextTestRunner):
+
+class NumbaTestRunner(runner.TextTestRunner):
     """
     A test runner which delegates the actual running to a pool of child
     processes.
@@ -685,7 +686,7 @@ class ParallelTestRunner(runner.TextTestRunner):
         self.runner_args = kwargs
         self.duration_log = DurationLog()
 
-    def _run_inner(self, result):
+    def _run_parallel(self, result):
         # We hijack TextTestRunner.run()'s inner logic by passing this
         # method as if it were a test case.
         child_runner = _MinimalRunner(self.runner_cls, self.runner_args)
@@ -715,40 +716,9 @@ class ParallelTestRunner(runner.TextTestRunner):
                 # Always join the pool (this is necessary for coverage.py)
                 pool.join()
         parallel_time = time.time() - t
-        if not result.shouldStop:
-            t = time.time()
-            stests = SerialSuite(self._stests)
-            sresult = SerialTestResult(
-                result.stream,
-                result.descriptions,
-                1
-            )
-            sresult._init(self.duration_log)
-            stests.run(sresult)
-            serial_time = time.time() - t
-            result.add_results(sresult)
-            print()
-            print("Number of parallel test functions: '{}'".format(len(self._ptests)))
-            print("Total serial test functions: '{}'".format(len(self._stests)))
-            print("Total time parallel tests: '{}'".format(parallel_time))
-            print("Total time serial tests: '{}'".format(serial_time))
-            self.duration_log.close()
-            print("Duration log has been written to: '{}'."
-                  .format(self.duration_log.file_name))
-            try:
-                import pandas
-            except:
-                "Unable to analyse duration log, please install pandas."
-            else:
-                df = pandas.read_csv("duration_log.csv")
-                pandas.options.display.max_colwidth = 120
-                print("Top 20 functions")
-                print(df.sort_values(by='duration').tail(20))
-                print("Total test functions by type from duration log")
-                print(df.groupby(by='type').count()["name"])
-            return result
+        return parallel_time
 
-    def _run_parallel_tests(self, result, pool, child_runner, tests):
+    def _run_parallel_inner(self, result, pool, child_runner, tests):
         remaining_ids = set(t.id() for t in tests)
         it = pool.imap_unordered(child_runner, tests)
         while True:
@@ -773,8 +743,50 @@ class ParallelTestRunner(runner.TextTestRunner):
                     result.shouldStop = True
                     return
 
+    def _run_serial(self, result):
+        t = time.time()
+        stests = SerialSuite(self._stests)
+        sresult = SerialTestResult(
+            result.stream,
+            result.descriptions,
+            1
+        )
+        sresult._init(self.duration_log)
+        stests.run(sresult)
+        serial_time = time.time() - t
+        result.add_results(sresult)
+        return serial_time
+
+    def _report(self, parallel_time, serial_time):
+        print()
+        print("Number of parallel test functions: '{}'".format(len(self._ptests)))
+        print("Total serial test functions: '{}'".format(len(self._stests)))
+        print("Total time parallel tests: '{}'".format(parallel_time))
+        print("Total time serial tests: '{}'".format(serial_time))
+        self.duration_log.close()
+        print("Duration log has been written to: '{}'.".
+              format(self.duration_log.file_name))
+        try:
+            import pandas
+        except ImportError:
+            "Unable to analyse duration log, please install pandas."
+        else:
+            df = pandas.read_csv("duration_log.csv")
+            pandas.options.display.max_colwidth = 120
+            print("Top 20 functions")
+            print(df.sort_values(by='duration').tail(20))
+            print("Total test functions by type from duration log")
+            print(df.groupby(by='type').count()["name"])
+
+    def _run_inner(self, result):
+        parallel_time = self._run_parallel(result)
+        if not result.shouldStop:
+            serial_time = self._run_serial(result)
+        self._report(parallel_time, serial_time)
+        return result
+
     def run(self, test):
         self._ptests, self._stests = _split_nonparallel_tests(test)
         # This will call self._run_inner() on the created result object,
         # and print out the detailed test results at the end.
-        return super(ParallelTestRunner, self).run(self._run_inner)
+        return super(Numba, self).run(self._run_inner)
