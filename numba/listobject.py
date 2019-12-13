@@ -28,6 +28,7 @@ from numba.types import (
     Type,
     NoneType,
 )
+from numba.targets import quicksort
 from numba.targets.imputils import impl_ret_borrowed, RefType
 from numba.errors import TypingError
 from numba import typing
@@ -1119,6 +1120,45 @@ def impl_index(l, item, start=None, end=None):
         else:
             raise ValueError("item not in list")
 
+    return impl
+
+
+def gt(a, b):
+    return a > b
+
+
+sort_forwards = quicksort.make_jit_quicksort().run_quicksort
+sort_backwards = quicksort.make_jit_quicksort(lt=gt).run_quicksort
+
+arg_sort_forwards = quicksort.make_jit_quicksort(is_argsort=True).run_quicksort
+arg_sort_backwards = quicksort.make_jit_quicksort(is_argsort=True, lt=gt)
+
+
+@overload_method(types.ListType, 'sort')
+def sort_impl(l, key=None, reverse=False):
+    if not isinstance(l, types.ListType):
+        return
+
+    if (isinstance(key, (types.NoneType, types.Omitted)) or key is None):
+        KEY = False
+        sort_f = sort_forwards
+        sort_b = sort_backwards
+    else:
+        KEY = True
+        sort_f = arg_sort_forwards
+        sort_b = arg_sort_backwards
+
+    def impl(l, key=None, reverse=False):
+        if KEY is True:
+            _lst = [key(x) for x in l]
+        else:
+            _lst = l
+        if not reverse:
+            tmp = sort_f(_lst)
+        else:
+            tmp = sort_b(_lst)
+        if KEY is True:
+            l[:] = [l[i] for i in tmp]
     return impl
 
 

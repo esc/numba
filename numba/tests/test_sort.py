@@ -19,6 +19,8 @@ from numba.targets.mergesort import make_jit_mergesort
 from .timsort import make_py_timsort, make_jit_timsort, MergeRun
 
 
+from numba.future import disable_reflected_list
+
 def make_temp_list(keys, n):
     return [keys[0]] * n
 
@@ -881,7 +883,7 @@ class TestPythonSort(TestCase):
         for size in (20, 50, 500):
             orig = np.random.random(size=size) * 100
             expected = sorted(orig)
-            got = cfunc(orig)
+            got = list(cfunc(orig))
             self.assertPreciseEqual(got, expected)
             self.assertNotEqual(list(orig), got)   # sanity check
 
@@ -893,7 +895,7 @@ class TestPythonSort(TestCase):
         orig = np.random.random(size=size) * 100
         for b in (False, True):
             expected = sorted(orig, reverse=b)
-            got = cfunc(orig, b)
+            got = list(cfunc(orig, b))
             self.assertPreciseEqual(got, expected)
             self.assertNotEqual(list(orig), got)   # sanity check
 
