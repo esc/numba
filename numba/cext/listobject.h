@@ -91,6 +91,9 @@ numba_list_size_address(NB_List *lp);
 NUMBA_EXPORT_FUNC(Py_ssize_t)
 numba_list_length(NB_List *lp);
 
+NUMBA_EXPORT_FUNC(void)
+numba_list_unsafe_set_length(NB_List *lp, int size);
+
 NUMBA_EXPORT_FUNC(Py_ssize_t)
 numba_list_allocated(NB_List *lp);
 

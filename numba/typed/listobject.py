@@ -449,6 +449,39 @@ def impl_allocated(l):
         return impl
 
 
+@overload_method(types.ListType, "_unsafe_set_length")
+def impl_unsafe_set_length(l, new_length):
+    """list._unsafe_set_length"""
+    if isinstance(l, types.ListType):
+        def impl(l, new_length):
+            _unsafe_set_length(l, new_length)
+        return impl
+
+
+@intrinsic
+def _unsafe_set_length(typingctx, l, new_length):
+    """Wrap numba_list_set_mutable
+
+    Sets the value of the length.
+    """
+    resty = types.void
+    sig = resty(l, new_length)
+
+    def codegen(context, builder, sig, args):
+        fnty = ir.FunctionType(
+            ir.VoidType(),
+            [ll_list_type, cgutils.intp_t],
+        )
+        fn = cgutils.get_or_insert_function(builder.module, fnty,
+                                            'numba_list_unsafe_set_length')
+        [l, i] = args
+        [tl, ti] = sig.args
+        lp = _container_get_data(context, builder, tl, l)
+        builder.call(fn, [lp, i])
+
+    return sig, codegen
+
+
 @intrinsic
 def _list_allocated(typingctx, l):
     """Wrap numba_list_allocated

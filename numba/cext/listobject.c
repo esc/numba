@@ -29,6 +29,7 @@
  * - Creation                 numba_list_new
  * - Deletion                 numba_list_free
  * - Accessing the length     numba_list_length
+ * - Update the lenth         numba_list_unsafe_set_length
  * - Appending to the list    numba_list_append
  * - Getting an item          numba_list_setitem
  * - Setting an item          numba_list_getitem
@@ -240,6 +241,18 @@ numba_list_size_address(NB_List *lp)
 Py_ssize_t
 numba_list_length(NB_List *lp) {
     return lp->size;
+}
+
+/* Set the length of a list.
+ *
+ * This operation is unsafe, the caller must ensure, enough space has been
+ * allocated under the hood, otherwise: undefined behaviour.
+ *
+ * lp: a list
+ */
+void
+numba_list_unsafe_set_length(NB_List *lp, int size) {
+    lp->size = size;
 }
 
 /* Return the current allocation of a list.

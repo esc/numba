@@ -59,6 +59,17 @@ def _length(l):
 
 
 @njit
+def _unsafe_set_length(l, new_length):
+    l._unsafe_set_length(new_length)
+
+
+@njit
+def convert(py_list, typed_list):
+    for i in range(len(py_list)):
+        typed_list[i] = py_list[i]
+
+
+@njit
 def _allocated(l):
     return l._allocated()
 
@@ -260,6 +271,11 @@ class List(MutableSequence, pt.Generic[T]):
                 # NumPy Array.
                 if hasattr(iterable, "ndim") and iterable.ndim == 0:
                     self.append(iterable.item())
+                elif type(iterable) == list:
+                    self._initialise_list(typeof(iterable[0]),
+                                          allocated=len(iterable))
+                    _unsafe_set_length(self, len(iterable))
+                    convert(iterable, self)
                 else:
                     try:
                         iter(iterable)
@@ -296,9 +312,10 @@ class List(MutableSequence, pt.Generic[T]):
             raise RuntimeError("invalid operation on untyped list")
         return self._list_type.dtype
 
-    def _initialise_list(self, item):
+    def _initialise_list(self, item, allocated=DEFAULT_ALLOCATED):
         lsttype = types.ListType(typeof(item))
-        self._list_type, self._opaque = self._parse_arg(lsttype)
+        self._list_type, self._opaque = self._parse_arg(lsttype,
+                                                        allocated=allocated)
 
     def __len__(self) -> int:
         if not self._typed:
