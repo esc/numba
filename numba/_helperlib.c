@@ -27,7 +27,7 @@
 #include "_arraystruct.h"
 
 
-#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 11)
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION >= 11)
     /*
      * For struct _frame
      */
