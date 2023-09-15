@@ -43,20 +43,21 @@ call_trace(Py_tracefunc func, PyObject *obj,
            PyThreadState *tstate, PyFrameObject *frame,
            int what, PyObject *arg)
 {
-    int result;
-    if (tstate->tracing) {
-        return 0;
-    }
-    if (frame == NULL) {
-        return -1;
-    }
-    int old_what = tstate->tracing_what;
-    tstate->tracing_what = what;
-    PyThreadState_EnterTracing(tstate);
-    result = func(obj, frame, what, NULL);
-    PyThreadState_LeaveTracing(tstate);
-    tstate->tracing_what = old_what;
-    return result;
+    //int result;
+    //if (tstate->tracing) {
+    //    return 0;
+    //}
+    //if (frame == NULL) {
+    //    return -1;
+    //}
+    //int old_what = tstate->tracing_what;
+    //tstate->tracing_what = what;
+    //PyThreadState_EnterTracing(tstate);
+    //result = func(obj, frame, what, NULL);
+    //PyThreadState_LeaveTracing(tstate);
+    //tstate->tracing_what = old_what;
+    //return result;
+    return 0;
 }
 
 /*
