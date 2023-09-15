@@ -21,16 +21,18 @@ from numba.core.imputils import (lower_constant, lower_cast, lower_builtin,
                                  iternext_impl, impl_ret_new_ref, RefType)
 from numba.core.datamodel import register_default, StructModel
 from numba.core import types, cgutils
+from numba.core.utils import PYVERSION
 from numba.core.pythonapi import (
     PY_UNICODE_1BYTE_KIND,
     PY_UNICODE_2BYTE_KIND,
     PY_UNICODE_4BYTE_KIND,
-    PY_UNICODE_WCHAR_KIND,
 )
+
 from numba._helperlib import c_helpers
 from numba.cpython.hashing import _Py_hash_t
 from numba.core.unsafe.bytes import memcpy_region
 from numba.core.errors import TypingError
+
 from numba.cpython.unicode_support import (_Py_TOUPPER, _Py_TOLOWER, _Py_UCS4,
                                            _Py_ISALNUM,
                                            _PyUnicode_ToUpperFull,
@@ -64,6 +66,8 @@ from numba.cpython.unicode_support import (_Py_TOUPPER, _Py_TOLOWER, _Py_UCS4,
                                            _PyUnicode_IsDecimalDigit)
 from numba.cpython import slicing
 
+if PYVERSION < (3, 12):
+    from numba.core.pythonapi import PY_UNICODE_WCHAR_KIND
 
 # https://github.com/python/cpython/blob/1d4b6ba19466aba0eb91c4ba01ba509acf18c723/Objects/unicodeobject.c#L84-L85    # noqa: E501
 _MAX_UNICODE = 0x10ffff
