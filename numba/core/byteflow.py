@@ -1068,7 +1068,7 @@ class TraceRunner(object):
         vararg = state.pop()
         func = state.pop()
 
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             if _is_null_temp_reg(state.peek(1)):
                 state.pop() # pop NULL, it's not used
 
@@ -1349,7 +1349,7 @@ class TraceRunner(object):
     op_BINARY_XOR = _binaryop
 
     def op_MAKE_FUNCTION(self, state, inst, MAKE_CLOSURE=False):
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             # https://github.com/python/cpython/commit/2f180ce
             # name set via co_qualname
             name = None
@@ -1434,7 +1434,7 @@ class TraceRunner(object):
     # NOTE: Please see notes in `interpreter.py` surrounding the implementation
     # of LOAD_METHOD and CALL_METHOD.
 
-    if PYVERSION == (3, 11):
+    if PYVERSION >= (3, 11):
         def op_LOAD_METHOD(self, state, inst):
             item = state.pop()
             extra = state.make_null()
