@@ -656,7 +656,8 @@ call_cfunc(Dispatcher *self, PyObject *cfunc, PyObject *args, PyObject *kws, PyO
      * it's now baked into ThreadState.
      * https://github.com/python/cpython/pull/26623
      */
-    if (tstate->cframe->use_tracing && tstate->c_profilefunc)
+    //if (tstate->cframe->use_tracing && tstate->c_profilefunc)
+    if (tstate->c_profilefunc)
 #elif (PY_MAJOR_VERSION >= 3) && (PY_MINOR_VERSION == 10)
     /*
      * On Python 3.10+ trace_info comes from somewhere up in PyFrameEval et al,
