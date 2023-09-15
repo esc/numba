@@ -20,6 +20,7 @@ PY_UNICODE_4BYTE_KIND = _helperlib.py_unicode_4byte_kind
 if PYVERSION in ((3, 8), (3, 9), (3, 10), (3, 11)):
     PY_UNICODE_WCHAR_KIND = _helperlib.py_unicode_wchar_kind
 
+
 class _Registry(object):
 
     def __init__(self):
