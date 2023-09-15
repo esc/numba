@@ -319,7 +319,7 @@ class TraceRunner(object):
     def dispatch(self, state):
         if PYVERSION > (3, 11):
             raise NotImplementedError(PYVERSION)
-        elif PYVERSION == (3, 11) and state._blockstack:
+        elif PYVERSION >= (3, 11) and state._blockstack:
             state: State
             while state._blockstack:
                 topblk = state._blockstack[-1]
