@@ -1377,7 +1377,7 @@ class Interpreter(object):
         # Interpret loop
         for inst, kws in self._iter_inst():
             self._dispatch(inst, kws)
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             # Insert end of try markers
             self._end_try_blocks()
         elif PYVERSION > (3, 11):
@@ -1392,12 +1392,12 @@ class Interpreter(object):
         # post process the IR to rewrite opcodes/byte sequences that are too
         # involved to risk handling as part of direct interpretation
         peepholes = []
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             peepholes.append(peep_hole_split_at_pop_block)
         if PYVERSION in [(3, 9), (3, 10), (3, 11)]:
             peepholes.append(peep_hole_list_to_tuple)
         peepholes.append(peep_hole_delete_with_exit)
-        if PYVERSION in [(3, 10), (3, 11)]:
+        if PYVERSION in [(3, 10), (3, 11), (3, 12)]:
             # peep_hole_call_function_ex_to_call_function_kw
             # depends on peep_hole_list_to_tuple converting
             # any large number of arguments from a list to a
@@ -1430,7 +1430,7 @@ class Interpreter(object):
 
         See also: _insert_try_block_end
         """
-        assert PYVERSION == (3, 11)
+        assert PYVERSION >= (3, 11)
         graph = self.cfa.graph
         for offset, block in self.blocks.items():
             # Get current blockstack
@@ -1532,7 +1532,7 @@ class Interpreter(object):
         self.dfainfo = self.dfa.infos[self.current_block_offset]
         self.assigner = Assigner()
         # Check out-of-scope syntactic-block
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             # This is recreating pre-3.11 code structure
             while self.syntax_blocks:
                 if offset >= self.syntax_blocks[-1].exit:
@@ -1703,7 +1703,7 @@ class Interpreter(object):
                 val = self.get(varname)
             except ir.NotDefinedError:
                 # Hack to make sure exception variables are defined
-                assert PYVERSION == (3, 11), "unexpected missing definition"
+                assert PYVERSION >= (3, 11), "unexpected missing definition"
                 val = ir.Const(value=None, loc=self.loc)
             stmt = ir.Assign(value=val, target=target,
                              loc=self.loc)
@@ -1762,14 +1762,14 @@ class Interpreter(object):
         if self._DEBUG_PRINT:
             print(inst)
         assert self.current_block is not None
-        if PYVERSION == (3, 11):
+        if PYVERSION >= (3, 11):
             if self.syntax_blocks:
                 top = self.syntax_blocks[-1]
                 if isinstance(top, ir.With) :
                     if inst.offset >= top.exit:
                         self.current_block.append(ir.PopBlock(loc=self.loc))
                         self.syntax_blocks.pop()
-        elif PYVERSION > (3, 11):
+        elif PYVERSION > (3, 12):
             raise NotImplementedError(PYVERSION)
 
         fname = "op_%s" % inst.opname.replace('+', '_')
@@ -2219,7 +2219,7 @@ class Interpreter(object):
     def op_COPY_FREE_VARS(self, inst):
         pass
 
-    if PYVERSION == (3, 11):
+    if PYVERSION >= (3, 11):
         def op_LOAD_DEREF(self, inst, res):
             name = self.func_id.func.__code__._varname_from_oparg(inst.arg)
             if name in self.code_cellvars:
@@ -2244,7 +2244,7 @@ class Interpreter(object):
     else:
         raise NotImplementedError(PYVERSION)
 
-    if PYVERSION == (3, 11):
+    if PYVERSION >= (3, 11):
         def op_MAKE_CELL(self, inst):
             pass  # ignored bytecode
 
@@ -3026,7 +3026,7 @@ class Interpreter(object):
         self.op_MAKE_FUNCTION(inst, name, code, closure, annotations,
                               kwdefaults, defaults, res)
 
-    if PYVERSION == (3, 11):
+    if PYVERSION >= (3, 11):
 
         def op_LOAD_CLOSURE(self, inst, res):
             name = self.func_id.func.__code__._varname_from_oparg(inst.arg)
