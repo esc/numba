@@ -64,7 +64,7 @@ jobs:
           name: llvmlite-osx-64-py${{ matrix.python-version }}
           path: llvmlite_conda
           run-id: ${{ inputs.llvmlite_run_id }}
-          repository: numba/llvmlite
+          repository: esc/llvmlite
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install conda-build
@@ -155,7 +155,7 @@ jobs:
           name: llvmlite-osx-64-py${{ matrix.python-version }}
           path: llvmlite_conda
           run-id: ${{ inputs.llvmlite_run_id }}
-          repository: numba/llvmlite
+          repository: esc/llvmlite
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download numba artifact
